@@ -1,0 +1,77 @@
+{
+  "name": "synced-countdown",
+  "version": "0.1.0",
+  "description": "A framework-agnostic countdown/timer that stays correct even when the device clock is wrong or the tab is backgrounded. NTP-style server sync, monotonic elapsed time, rAF-throttled ticks. React adapter included.",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Vinod S.",
+  "keywords": [
+    "countdown",
+    "timer",
+    "ntp",
+    "server-time",
+    "clock-sync",
+    "requestAnimationFrame",
+    "react",
+    "typescript",
+    "framework-agnostic"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js",
+      "require": "./dist/core/index.cjs"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js",
+      "require": "./dist/react/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/core/index.cjs",
+  "module": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=17"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.7",
+    "@vitest/coverage-v8": "^2.1.8",
+    "happy-dom": "^15.11.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vinods/synced-countdown.git"
+  },
+  "homepage": "https://github.com/vinods/synced-countdown#readme"
+}
