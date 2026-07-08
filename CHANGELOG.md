@@ -8,7 +8,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Docs: spec-safe rAF wording (browsers suspend/throttle rAF in hidden tabs),
   precise performance.now framing (monotonic time origin), and a Date-header
   trust caveat (CDN/proxy/cache can rewrite it).
-- Docs: add npm/downloads/bundle-size/types/license badges and a quick-links row
+- Docs: add npm/bundle-size/types/license badges and a quick-links row
   (npm, live demo, API, changelog, issues) to the top of the README.
 
 ## 0.1.1

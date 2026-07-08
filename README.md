@@ -1,7 +1,6 @@
 # synced-countdown
 
 [![npm version](https://img.shields.io/npm/v/synced-countdown.svg)](https://www.npmjs.com/package/synced-countdown)
-[![npm downloads](https://img.shields.io/npm/dm/synced-countdown.svg)](https://www.npmjs.com/package/synced-countdown)
 [![minzipped size](https://img.shields.io/bundlephobia/minzip/synced-countdown.svg)](https://bundlephobia.com/package/synced-countdown)
 [![types](https://img.shields.io/npm/types/synced-countdown.svg)](https://www.npmjs.com/package/synced-countdown)
 [![license](https://img.shields.io/npm/l/synced-countdown.svg)](./LICENSE)
