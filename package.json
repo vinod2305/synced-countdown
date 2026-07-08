@@ -1,6 +1,6 @@
 {
   "name": "synced-countdown",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A framework-agnostic countdown/timer that stays correct even when the device clock is wrong or the tab is backgrounded. NTP-style server sync, monotonic elapsed time, rAF-throttled ticks. React adapter included.",
   "type": "module",
   "sideEffects": false,
@@ -71,7 +71,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vinods/synced-countdown.git"
+    "url": "git+https://github.com/vinod2305/synced-countdown.git"
   },
-  "homepage": "https://github.com/vinods/synced-countdown#readme"
+  "bugs": {
+    "url": "https://github.com/vinod2305/synced-countdown/issues"
+  },
+  "homepage": "https://github.com/vinod2305/synced-countdown#readme"
 }

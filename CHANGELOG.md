@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.1
+
+- Fix repository / homepage URLs (correct GitHub username).
+- Add `bugs` URL.
+- Add hosted demo link (https://synced-countdown-demo.vercel.app) to the README.
+
 ## 0.1.0 — Initial release
 
 - Framework-agnostic core (`synced-countdown`):

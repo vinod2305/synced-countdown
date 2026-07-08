@@ -38,7 +38,7 @@ drift while the synced one recovers on **Resync**.
 
 - **Run it locally:** `npm install && npm run build` at the repo root, then
   `cd demo && npm install && npm run dev`.
-- **Hosted demo:** _TODO — add deployed URL here (Vercel / StackBlitz / CodeSandbox)._
+- **Hosted demo:** **[synced-countdown-demo.vercel.app](https://synced-countdown-demo.vercel.app)** — drag the skew slider and watch the device-clock countdown drift while the synced one stays correct.
 
 ## Quick start — core (no framework)
 
