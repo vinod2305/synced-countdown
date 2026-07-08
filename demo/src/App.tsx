@@ -7,63 +7,59 @@ import {
 } from 'synced-countdown/react';
 
 /**
- * The whole point of this demo: a wrong *device* clock makes a naive countdown
- * lie, while a server-synced countdown stays correct.
+ * Demo: a wrong *device* clock makes a naive countdown lie, while a
+ * server-synced countdown stays correct.
  *
- * We simulate that with two clocks that both read the same (deliberately
- * skewed) device time:
- *   - `deviceClock` has NO fetchTime, so it trusts the wrong device clock.
- *   - `syncedClock` HAS a mocked fetchTime returning the *true* server time,
- *     so it computes an offset that cancels the skew out.
+ * Two clocks read the same (deliberately skewed) device time:
+ *   - `deviceClock` has NO fetchTime -> it trusts the wrong device clock.
+ *   - `syncedClock` HAS a mocked fetchTime returning the TRUE server time,
+ *     so its measured offset cancels the skew out.
  *
- * Drag the skew slider to make the device clock wrong. The device countdown
- * jumps immediately. The synced countdown also jumps (its last-measured offset
- * is now stale) — until you press "Resync", at which point it snaps back to
- * correct while the device clock stays wrong.
+ * The offset is only accurate as of the last sync. If the device clock changes
+ * afterwards, the synced clock must re-sync. "Auto-resync" mimics what a real
+ * app does automatically (on tab focus, network reconnect, or an interval).
  */
 
-const pad = (n: number) => String(n).padStart(2, '0');
+const C = {
+  bg: '#0b0f14',
+  surface: '#121821',
+  surfaceMuted: '#0e141c',
+  line: '#1e2732',
+  text: '#e6edf3',
+  muted: '#8b98a5',
+  faint: '#5b6672',
+  good: '#34d399',
+  bad: '#f0616d',
+  action: '#38bdf8',
+  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
+};
 
-function format(c: CountdownResult): string {
-  const dayPart = c.days > 0 ? `${c.days}d ` : '';
-  return `${dayPart}${pad(c.hours)}:${pad(c.minutes)}:${pad(c.seconds)}`;
-}
+const pad = (n: number) => String(n).padStart(2, '0');
+const format = (c: CountdownResult) =>
+  `${c.days > 0 ? `${c.days}d ` : ''}${pad(c.hours)}:${pad(c.minutes)}:${pad(c.seconds)}`;
 
 export function App() {
-  // Live skew (ms) read by BOTH clocks' now(). A ref so the clocks always see
-  // the current value without being recreated.
   const skewRef = useRef(0);
   const [skew, setSkew] = useState(0);
+  const [autoResync, setAutoResync] = useState(true);
+  const [lastResync, setLastResync] = useState<number | null>(null);
 
-  // Create the two clocks once (lazy ref init — no side effects in render body
-  // beyond first construction).
   const clocksRef = useRef<{ synced: ServerClock; device: ServerClock } | null>(
     null,
   );
   if (!clocksRef.current) {
-    // The "device" wall clock: real time plus the injected skew.
-    const deviceNow = () => Date.now() + skewRef.current;
-    // The mocked server endpoint: returns the TRUE current time.
-    const mockFetchTime = async () => Date.now();
-
+    const deviceNow = () => Date.now() + skewRef.current; // wrong device clock
+    const mockFetchTime = async () => Date.now(); // "server" = true time
     clocksRef.current = {
-      synced: createServerClock({
-        fetchTime: mockFetchTime,
-        now: deviceNow,
-        samples: 3,
-      }),
+      synced: createServerClock({ fetchTime: mockFetchTime, now: deviceNow, samples: 3 }),
       device: createServerClock({ now: deviceNow }),
     };
   }
   const { synced: syncedClock, device: deviceClock } = clocksRef.current;
 
-  // Fixed target ~2 minutes from the true server time.
-  const targetRef = useRef(Date.now() + 120_000);
+  const targetRef = useRef(Date.now() + 120_000); // ~2 min out (true time)
   const target = targetRef.current;
 
-  const [lastResync, setLastResync] = useState<number | null>(null);
-
-  // Sync once on mount; dispose on unmount.
   useEffect(() => {
     void syncedClock.sync().then(() => setLastResync(Date.now()));
     return () => {
@@ -72,74 +68,81 @@ export function App() {
     };
   }, [syncedClock, deviceClock]);
 
-  const syncedCountdown = useServerCountdown(target, { clock: syncedClock });
-  const deviceCountdown = useServerCountdown(target, { clock: deviceClock });
+  const syncedCountdown = useServerCountdown(target, { clock: syncedClock, intervalMs: 250 });
+  const deviceCountdown = useServerCountdown(target, { clock: deviceClock, intervalMs: 250 });
   const { offset, status } = useServerTime(syncedClock);
-
-  function applySkew(v: number) {
-    skewRef.current = v;
-    setSkew(v);
-  }
 
   async function resync() {
     await syncedClock.sync();
     setLastResync(Date.now());
   }
 
-  // How far apart the two countdowns are right now (the visible drift).
-  const driftMs = deviceCountdown.remaining - syncedCountdown.remaining;
-  const driftSeconds = Math.round(driftMs / 1000);
+  function applySkew(v: number) {
+    skewRef.current = v;
+    setSkew(v);
+    if (autoResync) void resync();
+  }
+
+  const driftSeconds = Math.round(
+    (deviceCountdown.remaining - syncedCountdown.remaining) / 1000,
+  );
+  const naiveWrong = Math.abs(driftSeconds) >= 1;
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <header>
-          <h1 style={styles.h1}>synced-countdown</h1>
-          <p style={styles.subtitle}>
-            A wrong device clock makes a naive countdown lie. A server-synced
-            one stays correct. Drag the skew, watch them diverge, then hit{' '}
-            <strong>Resync</strong>.
+    <div style={s.page}>
+      <div style={s.container}>
+        <header style={s.header}>
+          <div style={s.eyebrow}>npm&nbsp;i&nbsp;synced-countdown</div>
+          <h1 style={s.h1}>Is your countdown telling the truth?</h1>
+          <p style={s.subtitle}>
+            A countdown built on <code style={s.code}>Date.now()</code> trusts the
+            visitor&rsquo;s clock — which is often wrong. Both timers below count
+            down to the <em>same</em> deadline. Drag the slider to fake a wrong
+            device clock and watch the naive one drift while the synced one holds.
           </p>
+          <div style={s.links}>
+            <a style={s.link} href="https://www.npmjs.com/package/synced-countdown">npm ↗</a>
+            <a style={s.link} href="https://github.com/vinod2305/synced-countdown">GitHub ↗</a>
+          </div>
         </header>
 
-        <section style={styles.cards}>
+        <div style={s.cards}>
           <ClockCard
-            label="Device clock"
-            sublabel="trusts Date.now() — no server sync"
+            tag="NAIVE"
+            title="Date.now()"
+            note="Trusts the device clock. No sync."
             countdown={deviceCountdown}
-            accent="#ef4444"
-            wrong={Math.abs(driftSeconds) >= 1}
+            color={C.bad}
+            badge={naiveWrong ? `off by ${Math.abs(driftSeconds)}s` : 'ok for now'}
+            badgeBad={naiveWrong}
+            emphasize={naiveWrong}
           />
           <ClockCard
-            label="Synced clock"
-            sublabel="NTP-style offset from the server"
+            tag="SYNCED"
+            title="synced-countdown"
+            note="Server-anchored, latency-corrected."
             countdown={syncedCountdown}
-            accent="#22c55e"
-            wrong={false}
+            color={C.good}
+            badge="in sync"
+            badgeBad={false}
+            emphasize={false}
           />
-        </section>
+        </div>
 
-        <p
-          style={{
-            ...styles.drift,
-            color: Math.abs(driftSeconds) >= 1 ? '#ef4444' : '#94a3b8',
-          }}
-        >
-          {Math.abs(driftSeconds) < 1
-            ? 'The two clocks agree.'
-            : `The device countdown is ${driftSeconds > 0 ? 'ahead by' : 'behind by'} ${Math.abs(
-                driftSeconds,
-              )}s — it is lying to the user.`}
-        </p>
+        <div style={{ ...s.verdict, color: naiveWrong ? C.bad : C.faint }}>
+          {naiveWrong
+            ? `The naive countdown is ${driftSeconds > 0 ? 'ahead' : 'behind'} by ${Math.abs(driftSeconds)}s — it's lying to the user. The synced one isn't.`
+            : 'Both agree. Now skew the device clock below.'}
+        </div>
 
-        <section style={styles.controls}>
-          <label style={styles.controlLabel}>
-            Injected device-clock skew:{' '}
-            <strong>
-              {skew >= 0 ? '+' : ''}
-              {(skew / 1000).toFixed(0)}s
-            </strong>
-          </label>
+        <div style={s.panel}>
+          <div style={s.panelRow}>
+            <span style={s.panelLabel}>Pretend the visitor&rsquo;s clock is wrong</span>
+            <span style={s.skewValue}>
+              {skew >= 0 ? '+' : '−'}
+              {Math.abs(skew / 1000).toFixed(0)}s
+            </span>
+          </div>
           <input
             type="range"
             min={-60000}
@@ -147,198 +150,222 @@ export function App() {
             step={1000}
             value={skew}
             onChange={(e) => applySkew(Number(e.target.value))}
-            style={styles.slider}
+            style={{ width: '100%' }}
+            aria-label="Device clock skew in seconds"
           />
-          <div style={styles.buttonRow}>
-            <button style={styles.ghostButton} onClick={() => applySkew(0)}>
-              Reset skew
-            </button>
-            <button style={styles.primaryButton} onClick={() => void resync()}>
-              Resync
-            </button>
-          </div>
-        </section>
 
-        <section style={styles.stats}>
+          <div style={s.controlsRow}>
+            <label style={s.toggle}>
+              <input
+                type="checkbox"
+                checked={autoResync}
+                onChange={(e) => setAutoResync(e.target.checked)}
+                style={{ accentColor: C.action }}
+              />
+              <span>
+                Auto-resync
+                <span style={s.toggleHint}> — what a real app does on tab focus / reconnect</span>
+              </span>
+            </label>
+            <div style={s.btnRow}>
+              <button style={s.ghostBtn} onClick={() => applySkew(0)}>Reset</button>
+              <button style={s.primaryBtn} onClick={() => void resync()}>Resync now</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={s.stats}>
           <Stat label="clock status" value={status} />
-          <Stat
-            label="measured offset"
-            value={`${offset >= 0 ? '+' : ''}${offset} ms`}
-          />
+          <Stat label="measured offset" value={`${offset >= 0 ? '+' : ''}${offset} ms`} />
           <Stat
             label="last resync"
-            value={
-              lastResync
-                ? `${Math.max(0, Math.round((Date.now() - lastResync) / 1000))}s ago`
-                : '—'
-            }
+            value={lastResync ? `${Math.max(0, Math.round((Date.now() - lastResync) / 1000))}s ago` : '—'}
           />
-        </section>
+        </div>
 
-        <p style={styles.footnote}>
-          Both countdowns target the same instant (~2 minutes out). The device
-          clock reads <code>Date.now() + skew</code>; the mocked server always
-          returns the true time. Refresh the page to restart the countdown.
+        <div style={s.how}>
+          <div style={s.howTitle}>How it works</div>
+          <ol style={s.howList}>
+            <li>
+              The visitor&rsquo;s device clock can be wrong. <code style={s.code}>Date.now()</code> believes it — so the naive timer is off by exactly that error.
+            </li>
+            <li>
+              <b>synced-countdown</b> asked the server for the real time and measured the <b>offset</b> between it and the device (correcting for network latency). It recomputes remaining time from that corrected clock, so the error cancels out.
+            </li>
+            <li>
+              The offset is only fresh as of the last sync. If the clock changes, it <b>re-syncs</b> — automatically on tab focus, network reconnect, or an interval. Turn <b>Auto-resync</b> off and the synced timer drifts too, until you hit <b>Resync now</b>.
+            </li>
+          </ol>
+        </div>
+
+        <p style={s.footnote}>
+          Both timers target the same instant (~2&nbsp;min out). Device clock reads{' '}
+          <code style={s.code}>Date.now() + skew</code>; the mocked server returns the true time. Refresh to restart.
         </p>
       </div>
-    </main>
+    </div>
   );
 }
 
 function ClockCard(props: {
-  label: string;
-  sublabel: string;
+  tag: string;
+  title: string;
+  note: string;
   countdown: CountdownResult;
-  accent: string;
-  wrong: boolean;
+  color: string;
+  badge: string;
+  badgeBad: boolean;
+  emphasize: boolean;
 }) {
-  const { label, sublabel, countdown, accent, wrong } = props;
+  const { tag, title, note, countdown, color, badge, badgeBad, emphasize } = props;
   return (
     <div
       style={{
-        ...styles.card,
-        borderColor: wrong ? '#ef4444' : 'rgba(148,163,184,0.25)',
+        ...s.card,
+        borderColor: emphasize ? 'rgba(240,97,109,0.55)' : C.line,
+        boxShadow: emphasize ? '0 0 0 1px rgba(240,97,109,0.25)' : 'none',
       }}
     >
-      <div style={{ ...styles.cardDot, background: accent }} />
-      <div style={styles.cardLabel}>{label}</div>
-      <div style={styles.cardSublabel}>{sublabel}</div>
-      <div style={{ ...styles.time, color: accent }}>
-        {countdown.isComplete ? '00:00:00' : format(countdown)}
+      <div style={s.cardHead}>
+        <span style={{ ...s.cardTag, color }}>{tag}</span>
+        <span
+          style={{
+            ...s.cardBadge,
+            color: badgeBad ? C.bad : C.good,
+            borderColor: badgeBad ? 'rgba(240,97,109,0.4)' : 'rgba(52,211,153,0.4)',
+          }}
+        >
+          {badge}
+        </span>
       </div>
-      <div style={styles.breakdown}>
-        {countdown.days}d · {countdown.hours}h · {countdown.minutes}m ·{' '}
-        {countdown.seconds}s
-      </div>
+      <div style={s.cardTitle}>{title}</div>
+      <div style={s.cardNote}>{note}</div>
+      <div style={{ ...s.time, color }}>{countdown.isComplete ? '00:00:00' : format(countdown)}</div>
     </div>
   );
 }
 
 function Stat(props: { label: string; value: string }) {
   return (
-    <div style={styles.stat}>
-      <div style={styles.statLabel}>{props.label}</div>
-      <div style={styles.statValue}>{props.value}</div>
+    <div style={s.stat}>
+      <div style={s.statLabel}>{props.label}</div>
+      <div style={s.statValue}>{props.value}</div>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   page: {
-    minHeight: '100vh',
-    margin: 0,
+    minHeight: '100%',
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '64px 20px 80px',
+    background:
+      'linear-gradient(180deg, #0d131b 0%, #0b0f14 40%), radial-gradient(900px 400px at 80% -5%, rgba(56,189,248,0.08), transparent)',
+  },
+  container: { width: '100%', maxWidth: 760 },
+  header: { marginBottom: 28 },
+  eyebrow: {
+    fontFamily: C.mono,
+    fontSize: 12,
+    letterSpacing: '0.04em',
+    color: C.action,
+    background: 'rgba(56,189,248,0.08)',
+    border: '1px solid rgba(56,189,248,0.2)',
+    display: 'inline-block',
+    padding: '5px 10px',
+    borderRadius: 7,
+    marginBottom: 16,
+  },
+  h1: { margin: '0 0 12px', fontSize: 'clamp(26px, 4.5vw, 36px)', lineHeight: 1.1, letterSpacing: '-0.02em' },
+  subtitle: { margin: 0, color: C.muted, fontSize: 15.5, lineHeight: 1.6, maxWidth: '60ch' },
+  code: {
+    fontFamily: C.mono,
+    fontSize: '0.88em',
+    background: C.surfaceMuted,
+    border: `1px solid ${C.line}`,
+    padding: '1px 5px',
+    borderRadius: 5,
+    color: C.text,
+  },
+  links: { display: 'flex', gap: 16, marginTop: 16 },
+  link: { color: C.action, textDecoration: 'none', fontSize: 14, fontWeight: 600 },
+
+  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 },
+  card: {
+    padding: '18px 20px 22px',
+    borderRadius: 14,
+    border: `1px solid ${C.line}`,
+    background: C.surface,
+    transition: 'border-color 160ms ease, box-shadow 160ms ease',
+  },
+  cardHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  cardTag: { fontFamily: C.mono, fontSize: 11, letterSpacing: '0.12em', fontWeight: 700 },
+  cardBadge: {
+    fontFamily: C.mono,
+    fontSize: 10.5,
+    padding: '3px 8px',
+    borderRadius: 999,
+    border: '1px solid',
+  },
+  cardTitle: { fontFamily: C.mono, fontSize: 14, marginTop: 12, color: C.text },
+  cardNote: { color: C.faint, fontSize: 12.5, marginTop: 3 },
+  time: {
+    fontFamily: C.mono,
+    fontSize: 'clamp(30px, 7vw, 42px)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+    marginTop: 14,
+    letterSpacing: '0.02em',
+  },
+
+  verdict: { fontSize: 13.5, minHeight: 20, margin: '16px 2px', fontWeight: 500, lineHeight: 1.5 },
+
+  panel: { padding: 20, borderRadius: 14, background: C.surface, border: `1px solid ${C.line}` },
+  panelRow: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 },
+  panelLabel: { fontSize: 14, color: C.text },
+  skewValue: { fontFamily: C.mono, fontSize: 15, fontWeight: 700, color: C.action, fontVariantNumeric: 'tabular-nums' },
+  controlsRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: '2rem 1rem',
-    background: 'radial-gradient(1200px 600px at 50% -10%, #1e293b, #0f172a)',
-    color: '#e2e8f0',
-    fontFamily:
-      "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    justifyContent: 'space-between',
+    gap: 16,
+    marginTop: 18,
+    flexWrap: 'wrap',
   },
-  container: { width: '100%', maxWidth: 720 },
-  h1: { margin: '0 0 0.25rem', fontSize: '1.9rem', letterSpacing: '-0.02em' },
-  subtitle: { margin: '0 0 1.5rem', color: '#94a3b8', lineHeight: 1.5 },
-  cards: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-    gap: '1rem',
-  },
-  card: {
-    position: 'relative',
-    padding: '1.25rem 1.25rem 1rem',
-    borderRadius: 14,
-    border: '1px solid rgba(148,163,184,0.25)',
-    background: 'rgba(15,23,42,0.6)',
-    transition: 'border-color 160ms ease',
-  },
-  cardDot: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-  },
-  cardLabel: { fontWeight: 600, fontSize: '0.95rem' },
-  cardSublabel: { color: '#94a3b8', fontSize: '0.8rem', marginTop: 2 },
-  time: {
-    fontSize: '2.4rem',
-    fontWeight: 700,
-    fontVariantNumeric: 'tabular-nums',
-    margin: '0.75rem 0 0.25rem',
-    letterSpacing: '0.01em',
-  },
-  breakdown: { color: '#64748b', fontSize: '0.8rem' },
-  drift: {
-    textAlign: 'center',
-    fontSize: '0.9rem',
-    minHeight: '1.25rem',
-    margin: '1rem 0',
-    fontWeight: 500,
-  },
-  controls: {
-    padding: '1.25rem',
-    borderRadius: 14,
-    background: 'rgba(15,23,42,0.6)',
-    border: '1px solid rgba(148,163,184,0.25)',
-  },
-  controlLabel: { display: 'block', marginBottom: '0.75rem', fontSize: '0.9rem' },
-  slider: { width: '100%', accentColor: '#38bdf8' },
-  buttonRow: {
-    display: 'flex',
-    gap: '0.75rem',
-    marginTop: '1rem',
-    justifyContent: 'flex-end',
-  },
-  ghostButton: {
-    padding: '0.55rem 1rem',
+  toggle: { display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: C.text, cursor: 'pointer' },
+  toggleHint: { color: C.faint },
+  btnRow: { display: 'flex', gap: 10, marginLeft: 'auto' },
+  ghostBtn: {
+    padding: '8px 14px',
     borderRadius: 9,
-    border: '1px solid rgba(148,163,184,0.35)',
+    border: `1px solid ${C.line}`,
     background: 'transparent',
-    color: '#e2e8f0',
+    color: C.muted,
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: 13.5,
+    fontWeight: 600,
   },
-  primaryButton: {
-    padding: '0.55rem 1.25rem',
+  primaryBtn: {
+    padding: '8px 16px',
     borderRadius: 9,
     border: 'none',
-    background: '#38bdf8',
-    color: '#0f172a',
-    fontWeight: 600,
+    background: C.action,
+    color: '#04222e',
+    fontWeight: 700,
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: 13.5,
   },
-  stats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '0.75rem',
-    marginTop: '1rem',
-  },
-  stat: {
-    padding: '0.75rem',
-    borderRadius: 10,
-    background: 'rgba(15,23,42,0.6)',
-    border: '1px solid rgba(148,163,184,0.2)',
-    textAlign: 'center',
-  },
-  statLabel: {
-    color: '#64748b',
-    fontSize: '0.72rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  statValue: {
-    fontWeight: 600,
-    marginTop: 4,
-    fontVariantNumeric: 'tabular-nums',
-  },
-  footnote: {
-    color: '#64748b',
-    fontSize: '0.78rem',
-    lineHeight: 1.5,
-    marginTop: '1.5rem',
-    textAlign: 'center',
-  },
+
+  stats: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 14 },
+  stat: { padding: '12px 14px', borderRadius: 11, background: C.surfaceMuted, border: `1px solid ${C.line}` },
+  statLabel: { color: C.faint, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: C.mono },
+  statValue: { fontFamily: C.mono, fontWeight: 600, marginTop: 6, fontVariantNumeric: 'tabular-nums', fontSize: 14 },
+
+  how: { marginTop: 26, padding: '18px 22px', borderRadius: 14, background: C.surfaceMuted, border: `1px solid ${C.line}` },
+  howTitle: { fontFamily: C.mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.faint, marginBottom: 10 },
+  howList: { margin: 0, paddingLeft: 20, color: C.muted, fontSize: 13.5, lineHeight: 1.65, display: 'grid', gap: 8 },
+
+  footnote: { color: C.faint, fontSize: 12, lineHeight: 1.6, marginTop: 24 },
 };

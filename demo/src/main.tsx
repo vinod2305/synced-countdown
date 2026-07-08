@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import './index.css';
 
 // Note: intentionally NOT wrapped in <React.StrictMode>. We create long-lived
 // ServerClock instances (with event listeners) and dispose them on unmount;
