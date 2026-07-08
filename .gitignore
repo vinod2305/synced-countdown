@@ -1,6 +1,9 @@
 node_modules
 dist
 coverage
+demo/node_modules
+demo/dist
+*.tsbuildinfo
 *.log
 .DS_Store
 .idea

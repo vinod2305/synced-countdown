@@ -29,6 +29,17 @@ npm install synced-countdown
 React is an **optional peer dependency** — you only need it for the
 `synced-countdown/react` entry point.
 
+## Live demo
+
+A runnable Vite + React demo lives in [`demo/`](./demo). It shows a **device
+clock** and a **synced clock** counting down to the same instant side by side —
+drag a skew slider to make the device clock wrong and watch the naive countdown
+drift while the synced one recovers on **Resync**.
+
+- **Run it locally:** `npm install && npm run build` at the repo root, then
+  `cd demo && npm install && npm run dev`.
+- **Hosted demo:** _TODO — add deployed URL here (Vercel / StackBlitz / CodeSandbox)._
+
 ## Quick start — core (no framework)
 
 ```ts
