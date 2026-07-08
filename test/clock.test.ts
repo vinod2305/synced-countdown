@@ -25,8 +25,8 @@ function makeNow(start = 1_000_000, step = 0) {
 
 describe('createServerClock — offset math', () => {
   it('computes offset = serverTime + rtt/2 - t3', async () => {
-    // Each now() call advances by 10ms: t0=1000, t3=1010, rtt=10.
-    const clockNow = makeNow(1000, 10);
+    // RTT is measured with the monotonic clock; t3 with the wall clock.
+    const mono = makeNow(1000, 10); // m0=1000, m1=1010 => rtt=10
     // server is 5000 ahead of the device midpoint.
     const serverTime = 6000;
     const fetchTime: FetchTime = async () => serverTime;
@@ -34,11 +34,12 @@ describe('createServerClock — offset math', () => {
     const clock = createServerClock({
       fetchTime,
       samples: 1,
-      now: clockNow.now,
+      now: () => 1010, // t3 = 1010
+      monotonic: mono.now,
     });
 
     await clock.sync();
-    // t0=1000, t3=1010, rtt=10 => offset = 6000 + 5 - 1010 = 4995
+    // t3=1010, rtt=10 => offset = 6000 + 5 - 1010 = 4995
     expect(clock.getOffset()).toBe(4995);
     clock.dispose();
   });
@@ -50,9 +51,10 @@ describe('createServerClock — offset math', () => {
       fetchTime,
       samples: 1,
       now: () => device,
+      monotonic: () => 0, // rtt = 0
     });
     await clock.sync();
-    // rtt = 0 (device static) => offset = 2000 + 0 - 1000 = 1000
+    // rtt = 0 => offset = 2000 + 0 - 1000 = 1000
     expect(clock.getOffset()).toBe(1000);
     device = 5000;
     expect(clock.now()).toBe(6000);
@@ -60,25 +62,54 @@ describe('createServerClock — offset math', () => {
   });
 
   it('keeps the sample with the smallest rtt (least jitter)', async () => {
-    // Drive rtt per sample by controlling the now() step between t0 and t3.
-    // We use a queue of "now" readings: [t0, t3] pairs.
-    const readings = [
+    // rtt per sample comes from the monotonic clock ([m0, m1] pairs); t3 from
+    // the wall clock (one reading per sample).
+    const monoReadings = [
       1000, 1100, // sample 0: rtt = 100
       2000, 2010, // sample 1: rtt = 10  <-- lowest
       3000, 3050, // sample 2: rtt = 50
     ];
-    let i = 0;
-    const now = () => readings[i++]!;
+    const t3Readings = [1100, 2010, 3050];
+    let mi = 0;
+    let ni = 0;
+    const monotonic = () => monoReadings[mi++]!;
+    const now = () => t3Readings[ni++]!;
 
     // server returns a value tied to which sample; we want to confirm the
     // low-rtt sample's offset wins. server = 10000 constant.
     const fetchTime: FetchTime = async () => 10000;
 
-    const clock = createServerClock({ fetchTime, samples: 3, now });
+    const clock = createServerClock({ fetchTime, samples: 3, now, monotonic });
     await clock.sync();
 
-    // Best sample is sample 1: t0=2000,t3=2010,rtt=10 => 10000 + 5 - 2010 = 7995
+    // Best sample is sample 1: t3=2010, rtt=10 => 10000 + 5 - 2010 = 7995
     expect(clock.getOffset()).toBe(7995);
+    clock.dispose();
+  });
+
+  it('a wall-clock jump during a sample does not corrupt the RTT/offset', async () => {
+    // The device wall clock leaps +1_000_000ms *during* the fetch. Because RTT
+    // is measured monotonically, the jump can't produce a bogus (or negative)
+    // RTT — t3 simply reflects the post-jump device time, which is exactly what
+    // the offset must cancel.
+    const mono = makeNow(500, 20); // m0=500, m1=520 => rtt=20 (clean)
+    let device = 1_000;
+    const fetchTime: FetchTime = async () => {
+      device += 1_000_000; // wall clock jumps mid-request
+      return 2_000; // true server time
+    };
+    const clock = createServerClock({
+      fetchTime,
+      samples: 1,
+      now: () => device, // t3 reads the post-jump wall time: 1_001_000
+      monotonic: mono.now,
+    });
+
+    await clock.sync();
+    // t3 = 1_001_000, rtt = 20 => offset = 2000 + 10 - 1_001_000 = -998_990
+    expect(clock.getOffset()).toBe(-998_990);
+    // now() = deviceNow + offset = 1_001_000 + (-998_990) = 2_010 ≈ true server time
+    expect(clock.now()).toBe(2_010);
     clock.dispose();
   });
 });

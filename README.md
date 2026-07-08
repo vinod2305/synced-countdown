@@ -13,9 +13,10 @@
 NTP-style offset (correcting for network latency), then **recomputes** the
 remaining time from that synced clock on every tick — it never decrements a
 stored value. It ticks off `requestAnimationFrame` (so it naturally pauses when
-the tab is hidden) and hard-resyncs on `visibilitychange` and `online`. Elapsed
-time is measured with a **monotonic** clock (`performance.now`), so a mid-session
-wall-clock jump doesn't make the timer lurch.
+the tab is hidden) and hard-resyncs on `visibilitychange` and `online`. The
+round-trip latency during each sync is measured with a **monotonic** clock
+(`performance.now`), so a wall-clock jump landing mid-measurement can't corrupt
+the offset.
 
 It's a tiny, dependency-free, **framework-agnostic** core with an optional thin
 **React** adapter.
@@ -148,9 +149,12 @@ create a default device clock internally if you don't pass one.
   hour, or a device that just regained connectivity, may have drifted. We
   re-measure the offset at exactly those moments so the timer is trustworthy the
   instant the user looks at it again.
-- **Monotonic elapsed time.** Elapsed measurement uses `performance.now`, which
-  can't be moved by the user or NTP daemons mid-session, so a wall-clock jump
-  never makes the timer leap.
+- **Monotonic latency measurement.** The round-trip time of each sync sample is
+  measured with `performance.now`, which can't be moved by the user or NTP
+  daemons mid-request. A wall-clock jump landing during a sample therefore can't
+  produce a bogus (or negative) RTT, so it can't poison the offset or the
+  smallest-RTT selection. (Any residual device-clock drift *between* syncs is
+  what the resync-on-visible / online / interval passes correct.)
 
 ## API
 
@@ -174,10 +178,11 @@ create a default device clock internally if you don't pass one.
 `subscribe(cb)` → unsubscribe, `dispose()`. Status is one of
 `'idle' | 'syncing' | 'ready' | 'error'`.
 
-**Offset algorithm.** For each sample: `t0 = now()`,
-`serverTime = await fetchTime()`, `t3 = now()`, `rtt = t3 - t0`,
-`offset = serverTime + rtt / 2 - t3`. The sample with the **smallest RTT** (least
-jitter) wins. `now()` returns `deviceNow + offset`.
+**Offset algorithm.** For each sample: `m0 = monotonic()`,
+`serverTime = await fetchTime()`, then, back-to-back, `t3 = now()` (device wall
+time) and `rtt = monotonic() - m0`. The offset is `serverTime + rtt / 2 - t3`.
+The sample with the **smallest RTT** (least jitter) wins. `now()` returns
+`deviceNow + offset`.
 
 ### React (`synced-countdown/react`)
 
